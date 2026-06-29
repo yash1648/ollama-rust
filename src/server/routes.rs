@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Response, sse::{Event, KeepAlive, Sse}},
     routing::{delete, get, post},
@@ -13,13 +13,14 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::info;
 
-use crate::model::{types::*, registry::normalize_name};
+use crate::model::types::*;
 use crate::server::{error::ApiError, inference, state::AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         // Core API
         .route("/", get(root))
+        .route("/api/health", get(health))
         .route("/api/version", get(version))
         .route("/api/tags", get(list_models))
         .route("/api/show", post(show_model))
@@ -39,6 +40,10 @@ pub fn router() -> Router<AppState> {
 
 async fn root() -> impl IntoResponse {
     "Ollama is running"
+}
+
+async fn health() -> Json<Value> {
+    Json(json!({ "status": "ok" }))
 }
 
 async fn version() -> Json<Value> {
@@ -78,7 +83,7 @@ async fn pull_model(
     State(state): State<AppState>,
     Json(req): Json<PullRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
-    let stream_flag = req.stream.unwrap_or(true);
+    let _stream_flag = req.stream.unwrap_or(true);
     let name = req.name.clone();
     let loader = state.loader.clone();
     let registry = state.registry.clone();
@@ -130,7 +135,7 @@ async fn create_model(
         .find(|l| l.to_uppercase().starts_with("FROM "))
         .ok_or_else(|| ApiError::bad_request("Modelfile must contain FROM directive"))?;
 
-    let base = from_line[5..].trim().to_string();
+    let _base = from_line[5..].trim().to_string();
     let (name, tag) = crate::model::registry::split_name(&req.name);
 
     let info = ModelInfo {
@@ -355,7 +360,7 @@ async fn embeddings(
     Ok(Json(EmbeddingResponse { embedding }))
 }
 
-async fn ps(State(state): State<AppState>) -> Json<PsResponse> {
+async fn ps(State(_state): State<AppState>) -> Json<PsResponse> {
     // Return empty — no models actively loaded in RAM for stub
     Json(PsResponse { models: vec![] })
 }
@@ -375,7 +380,7 @@ async fn openai_list_models(State(state): State<AppState>) -> Json<Value> {
 }
 
 async fn openai_chat(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let model = body["model"].as_str()
