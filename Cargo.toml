@@ -34,3 +34,13 @@ indicatif = "0.17"
 getrandom = "=0.2.15"
 reqwest = { version = "0.11", default-features = false, features = ["native-tls", "stream"] }
 tokio-util = "0.7"
+
+# Real inference via Candle (HuggingFace Rust ML framework)
+candle = { version = "0.11", package = "candle-core" }
+candle-nn = "0.11"
+candle-transformers = "0.11"
+tokenizers = "0.23"
+hf-hub = "0.4"
+rand = "0.8"
+async-trait = "0.1"
+ahash = "0.8"

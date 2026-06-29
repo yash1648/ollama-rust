@@ -198,6 +198,7 @@ impl ModelLoader {
 
         progress(&tx, "writing manifest", None, None, None).await;
 
+        let model_name_clone = model_name.clone();
         let model_info = ModelInfo {
             name: model_name,
             tag: tag.clone(),
@@ -210,9 +211,12 @@ impl ModelLoader {
             details: derive_details(&short_name, &tag),
         };
 
-        // Persist manifest to disk
+        // Persist model info to disk
         let store = ModelStore::with_base(self.models_dir.clone())?;
         store.save_model_info(&model_info)?;
+
+        // Persist the full OCI manifest (needed to find the GGUF blob for inference)
+        store.save_manifest(&model_name_clone, &tag, &manifest_text)?;
 
         progress(&tx, "success", None, None, None).await;
 

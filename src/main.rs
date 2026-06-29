@@ -4,6 +4,7 @@ mod server;
 mod storage;
 
 use anyhow::Result;
+use server::backend::BackendKind;
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -25,8 +26,26 @@ async fn main() -> Result<()> {
         .parse()
         .expect("Invalid OLLAMA_HOST: expected IP:port (e.g. 0.0.0.0:11434)");
 
+    // Select inference backend via OLLAMA_BACKEND env var
+    // "candle" → real inference via HuggingFace Candle
+    // (anything else) → stub/simulated inference
+    let backend_kind = match std::env::var("OLLAMA_BACKEND")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "candle" => {
+            tracing::info!("Using Candle inference backend");
+            BackendKind::Candle
+        }
+        _ => {
+            tracing::info!("Using stub inference backend (set OLLAMA_BACKEND=candle for real inference)");
+            BackendKind::Stub
+        }
+    };
+
     let store = storage::ModelStore::new()?;
-    let state = server::AppState::new(store);
+    let state = server::AppState::with_backend(store, backend_kind)?;
 
     server::run(state, addr).await
 }

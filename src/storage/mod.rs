@@ -91,4 +91,55 @@ impl ModelStore {
         let filename = digest.replace("sha256:", "");
         self.blobs_dir().join(filename)
     }
+
+    /// Save the full OCI manifest JSON for a model (from registry.ollama.ai).
+    /// Used by the inference backend to locate GGUF model blobs.
+    pub fn save_manifest(&self, name: &str, tag: &str, manifest: &str) -> Result<()> {
+        let sanitized = format!("{}_{}_manifest.json", name.replace('/', "_"), tag);
+        let path = self.manifests_dir().join(sanitized);
+        fs::write(path, manifest)?;
+        Ok(())
+    }
+
+    /// Load the saved OCI manifest for a model.
+    pub fn load_manifest(&self, name: &str, tag: &str) -> Result<Option<String>> {
+        let sanitized = format!("{}_{}_manifest.json", name.replace('/', "_"), tag);
+        let path = self.manifests_dir().join(sanitized);
+        if path.exists() {
+            Ok(Some(fs::read_to_string(&path)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Find the path to the GGUF model blob for a given model.
+    /// Reads the saved OCI manifest and locates the layer with the model media type.
+    pub fn find_gguf_blob(&self, name: &str, tag: &str) -> Result<Option<PathBuf>> {
+        let manifest_json = match self.load_manifest(name, tag)? {
+            Some(m) => m,
+            None => return Ok(None),
+        };
+
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest_json).map_err(|e| anyhow!("Invalid manifest: {}", e))?;
+
+        let layers = match manifest["layers"].as_array() {
+            Some(l) => l,
+            None => return Ok(None),
+        };
+
+        // Find the model layer (GGUF format)
+        for layer in layers {
+            let media_type = layer["mediaType"].as_str().unwrap_or("");
+            // Ollama model weights use media types like:
+            // application/vnd.ollama.image.model
+            // Also accept application/octet-stream as fallback for GGUF blobs
+            if media_type.contains("image.model") || media_type.contains("gguf") {
+                if let Some(digest) = layer["digest"].as_str() {
+                    return Ok(Some(self.blob_path(digest)));
+                }
+            }
+        }
+        Ok(None)
+    }
 }

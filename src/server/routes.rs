@@ -17,7 +17,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::info;
 
 use crate::model::types::*;
-use crate::server::{error::ApiError, inference, state::AppState};
+use crate::server::{error::ApiError, state::AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -204,74 +204,77 @@ async fn generate(State(state): State<AppState>, Json(req): Json<GenerateRequest
     let model_name = req.model.clone();
     let start = Instant::now();
 
-    if stream_flag {
-        let tokens = inference::generate_tokens(&req).await;
-        let token_count = tokens.len() as u32;
+    match state.backend.generate(&req).await {
+        Err(e) => {
+            return ApiError::internal(format!("Inference error: {}", e)).into_response();
+        }
+        Ok(tokens) => {
+            let token_count = tokens.len() as u32;
 
-        let event_stream = stream::iter(tokens.into_iter().enumerate())
-            .then(move |(_i, token)| {
-                let model = model_name.clone();
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                    let resp = GenerateResponse {
-                        model,
-                        created_at: Utc::now(),
-                        response: token,
-                        done: false,
-                        context: None,
-                        total_duration: None,
-                        load_duration: None,
-                        prompt_eval_count: None,
-                        prompt_eval_duration: None,
-                        eval_count: None,
-                        eval_duration: None,
-                    };
-                    let data = serde_json::to_string(&resp).unwrap_or_default();
-                    Ok::<Event, axum::Error>(Event::default().data(data))
-                }
-            })
-            .chain(stream::once(async move {
-                let (total, load, eval) = inference::timing_stats(start, token_count);
-                let done_resp = GenerateResponse {
+            if stream_flag {
+                let event_stream = stream::iter(tokens.into_iter().enumerate())
+                    .then(move |(_i, token)| {
+                        let model = model_name.clone();
+                        async move {
+                            let resp = GenerateResponse {
+                                model,
+                                created_at: Utc::now(),
+                                response: token,
+                                done: false,
+                                context: None,
+                                total_duration: None,
+                                load_duration: None,
+                                prompt_eval_count: None,
+                                prompt_eval_duration: None,
+                                eval_count: None,
+                                eval_duration: None,
+                            };
+                            let data = serde_json::to_string(&resp).unwrap_or_default();
+                            Ok::<Event, axum::Error>(Event::default().data(data))
+                        }
+                    })
+                    .chain(stream::once(async move {
+                        let elapsed = start.elapsed().as_nanos() as u64;
+                        let done_resp = GenerateResponse {
+                            model: req.model.clone(),
+                            created_at: Utc::now(),
+                            response: "".to_string(),
+                            done: true,
+                            context: Some(vec![1, 2, 3]),
+                            total_duration: Some(elapsed),
+                            load_duration: Some(elapsed / 10),
+                            prompt_eval_count: Some(req.prompt.split_whitespace().count() as u32),
+                            prompt_eval_duration: Some(elapsed / 10),
+                            eval_count: Some(token_count),
+                            eval_duration: Some(elapsed * 8 / 10),
+                        };
+                        let data = serde_json::to_string(&done_resp).unwrap_or_default();
+                        Ok::<Event, axum::Error>(Event::default().data(data))
+                    }));
+
+                Sse::new(event_stream)
+                    .keep_alive(KeepAlive::default())
+                    .into_response()
+            } else {
+                let full_response = tokens.join("");
+                let elapsed = start.elapsed().as_nanos() as u64;
+
+                let resp = GenerateResponse {
                     model: req.model.clone(),
                     created_at: Utc::now(),
-                    response: "".to_string(),
+                    response: full_response,
                     done: true,
                     context: Some(vec![1, 2, 3]),
-                    total_duration: Some(total),
-                    load_duration: Some(load),
+                    total_duration: Some(elapsed),
+                    load_duration: Some(elapsed / 10),
                     prompt_eval_count: Some(req.prompt.split_whitespace().count() as u32),
-                    prompt_eval_duration: Some(load),
+                    prompt_eval_duration: Some(elapsed / 10),
                     eval_count: Some(token_count),
-                    eval_duration: Some(eval),
+                    eval_duration: Some(elapsed * 8 / 10),
                 };
-                let data = serde_json::to_string(&done_resp).unwrap_or_default();
-                Ok::<Event, axum::Error>(Event::default().data(data))
-            }));
-
-        Sse::new(event_stream)
-            .keep_alive(KeepAlive::default())
-            .into_response()
-    } else {
-        let tokens = inference::generate_tokens(&req).await;
-        let full_response = tokens.join("");
-        let token_count = tokens.len() as u32;
-        let (total, load, eval) = inference::timing_stats(start, token_count);
-
-        let resp = GenerateResponse {
-            model: req.model.clone(),
-            created_at: Utc::now(),
-            response: full_response,
-            done: true,
-            context: Some(vec![1, 2, 3]),
-            total_duration: Some(total),
-            load_duration: Some(load),
-            prompt_eval_count: Some(req.prompt.split_whitespace().count() as u32),
-            prompt_eval_duration: Some(load),
-            eval_count: Some(token_count),
-            eval_duration: Some(eval),
-        };
-        Json(resp).into_response()
+                Json(resp).into_response()
+            }
+        }
     }
 }
 
@@ -284,80 +287,83 @@ async fn chat(State(state): State<AppState>, Json(req): Json<ChatRequest>) -> Re
     let model_name = req.model.clone();
     let start = Instant::now();
 
-    if stream_flag {
-        let tokens = inference::chat_tokens(&req).await;
-        let token_count = tokens.len() as u32;
+    match state.backend.chat(&req).await {
+        Err(e) => {
+            return ApiError::internal(format!("Inference error: {}", e)).into_response();
+        }
+        Ok(tokens) => {
+            let token_count = tokens.len() as u32;
 
-        let event_stream = stream::iter(tokens)
-            .then(move |token| {
-                let model = model_name.clone();
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                    let resp = ChatResponse {
-                        model,
-                        created_at: Utc::now(),
-                        message: Message {
-                            role: "assistant".to_string(),
-                            content: token,
-                            images: None,
-                        },
-                        done: false,
-                        total_duration: None,
-                        load_duration: None,
-                        prompt_eval_count: None,
-                        eval_count: None,
-                        eval_duration: None,
-                    };
-                    let data = serde_json::to_string(&resp).unwrap_or_default();
-                    Ok::<Event, axum::Error>(Event::default().data(data))
-                }
-            })
-            .chain(stream::once(async move {
-                let (total, load, eval) = inference::timing_stats(start, token_count);
-                let done_resp = ChatResponse {
+            if stream_flag {
+                let event_stream = stream::iter(tokens)
+                    .then(move |token| {
+                        let model = model_name.clone();
+                        async move {
+                            let resp = ChatResponse {
+                                model,
+                                created_at: Utc::now(),
+                                message: Message {
+                                    role: "assistant".to_string(),
+                                    content: token,
+                                    images: None,
+                                },
+                                done: false,
+                                total_duration: None,
+                                load_duration: None,
+                                prompt_eval_count: None,
+                                eval_count: None,
+                                eval_duration: None,
+                            };
+                            let data = serde_json::to_string(&resp).unwrap_or_default();
+                            Ok::<Event, axum::Error>(Event::default().data(data))
+                        }
+                    })
+                    .chain(stream::once(async move {
+                        let elapsed = start.elapsed().as_nanos() as u64;
+                        let done_resp = ChatResponse {
+                            model: req.model.clone(),
+                            created_at: Utc::now(),
+                            message: Message {
+                                role: "assistant".to_string(),
+                                content: "".to_string(),
+                                images: None,
+                            },
+                            done: true,
+                            total_duration: Some(elapsed),
+                            load_duration: Some(elapsed / 10),
+                            prompt_eval_count: Some(10),
+                            eval_count: Some(token_count),
+                            eval_duration: Some(elapsed * 8 / 10),
+                        };
+                        let data = serde_json::to_string(&done_resp).unwrap_or_default();
+                        Ok::<Event, axum::Error>(Event::default().data(data))
+                    }));
+
+                Sse::new(event_stream)
+                    .keep_alive(KeepAlive::default())
+                    .into_response()
+            } else {
+                let full = tokens.join("");
+                let elapsed = start.elapsed().as_nanos() as u64;
+
+                let resp = ChatResponse {
                     model: req.model.clone(),
                     created_at: Utc::now(),
                     message: Message {
                         role: "assistant".to_string(),
-                        content: "".to_string(),
+                        content: full,
                         images: None,
                     },
                     done: true,
-                    total_duration: Some(total),
-                    load_duration: Some(load),
+                    total_duration: Some(elapsed),
+                    load_duration: Some(elapsed / 10),
                     prompt_eval_count: Some(10),
                     eval_count: Some(token_count),
-                    eval_duration: Some(eval),
+                    eval_duration: Some(elapsed * 8 / 10),
                 };
-                let data = serde_json::to_string(&done_resp).unwrap_or_default();
-                Ok::<Event, axum::Error>(Event::default().data(data))
-            }));
-
-        Sse::new(event_stream)
-            .keep_alive(KeepAlive::default())
-            .into_response()
-    } else {
-        let tokens = inference::chat_tokens(&req).await;
-        let full = tokens.join("");
-        let token_count = tokens.len() as u32;
-        let (total, load, eval) = inference::timing_stats(start, token_count);
-
-        let resp = ChatResponse {
-            model: req.model.clone(),
-            created_at: Utc::now(),
-            message: Message {
-                role: "assistant".to_string(),
-                content: full,
-                images: None,
-            },
-            done: true,
-            total_duration: Some(total),
-            load_duration: Some(load),
-            prompt_eval_count: Some(10),
-            eval_count: Some(token_count),
-            eval_duration: Some(eval),
-        };
-        Json(resp).into_response()
+                Json(resp).into_response()
+            }
+        }
     }
 }
 
@@ -372,7 +378,7 @@ async fn embeddings(
         )));
     }
 
-    let embedding = inference::compute_embedding(&req.prompt, 4096);
+    let embedding = state.backend.embed(&req.prompt, 4096);
     Ok(Json(EmbeddingResponse { embedding }))
 }
 
@@ -401,7 +407,7 @@ async fn openai_list_models(State(state): State<AppState>) -> Json<Value> {
 }
 
 async fn openai_chat(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let model = body["model"]
@@ -432,7 +438,12 @@ async fn openai_chat(
         keep_alive: None,
     };
 
-    let tokens = inference::chat_tokens(&req).await;
+    let tokens = match state.backend.chat(&req).await {
+        Ok(t) => t,
+        Err(e) => {
+            return Err(ApiError::internal(format!("Inference error: {}", e)));
+        }
+    };
     let content = tokens.join("");
 
     Ok(Json(json!({
