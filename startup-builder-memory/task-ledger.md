@@ -3,7 +3,7 @@
 ## Progress
 
 ```
-██▓░░░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 4/10 tasks
+██▓▓░░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 6/10 tasks
 ```
 
 ## Milestones
@@ -25,7 +25,7 @@
 | 1.10 | Create README with usage docs | ✅ | |
 
 ### 🏁 Milestone 2: Hardening & Real Infrastructure
-> *Status: In Progress (4/10 tasks)*
+> *Status: In Progress (6/10 tasks)*
 
 | # | Task | Status | Effort | Notes |
 |---|------|--------|--------|-------|
@@ -34,8 +34,8 @@
 | 2.3 | Add configurable host/port (OLLAMA_HOST) | ✅ | Small | Env var, default 0.0.0.0:11434 |
 | 2.4 | Add graceful shutdown (signal handling) | ✅ | Small | SIGINT + SIGTERM handler |
 | 2.5 | Add health check endpoint (/api/health) | ✅ | Small | Returns `{"status": "ok"}` |
-| 2.6 | Add unit tests for registry | ⬜ | Medium | Mock store |
-| 2.7 | Add integration tests for API endpoints | ⬜ | Medium | axum::test helpers |
+| 2.6 | Add unit tests for registry | ✅ | Medium | 19 unit tests (normalize, split, CRUD) |
+| 2.7 | Add integration tests for API endpoints | ✅ | Medium | 17 integration tests (all endpoints) |
 | 2.8 | Set up CI/CD (GitHub Actions) | ⬜ | Medium | Build + test + clippy |
 | 2.9 | Add clippy linting + fix warnings | ⬜ | Small | Run `cargo clippy` |
 | 2.10 | Create Dockerfile + multi-arch build | ⬜ | Medium | Alpine-based |
@@ -90,7 +90,15 @@
 | 2.4 — Graceful shutdown | ✅ SIGINT + SIGTERM handling |
 | 2.5 — Health check endpoint | ✅ `GET /api/health` → `{"status": "ok"}` |
 
-**Next recommended feature**: Milestone 2 tasks 2.6 & 2.7 — Test suite (unit + integration)
+### Batch 2 Complete: Test Suite (feat/test-suite)
+
+| Task | Result |
+|------|--------|
+| 2.6 — Unit tests for registry | ✅ 19 tests — normalize_name, split_name, register, get, exists, remove, copy, edge cases |
+| 2.7 — Integration tests for API | ✅ 17 tests — health, version, CRUD models, inference errors, OpenAI compat, push/ps |
+| Library target added | ✅ `src/lib.rs` with re-exports for external consumers |
+
+**Next recommended feature**: Milestone 2 tasks 2.8 & 2.9 — CI/CD pipeline + clippy linting
 
 ## Task Status Key
 - ✅ Complete

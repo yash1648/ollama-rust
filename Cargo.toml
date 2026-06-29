@@ -7,6 +7,10 @@ edition = "2021"
 name = "ollama-rs"
 path = "src/main.rs"
 
+[lib]
+name = "ollama_rs"
+path = "src/lib.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.6", features = ["json"] }
