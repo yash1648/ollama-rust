@@ -2,13 +2,9 @@
 //! downloading GGUF blobs, and streaming pull progress.
 //! Uses only std TcpStream (no reqwest) to avoid edition2024 dep chain.
 
-use anyhow::{Result, anyhow};
-use serde::Deserialize;
-use std::io::{Read, Write, BufRead, BufReader};
-use std::net::TcpStream;
+use anyhow::Result;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use tracing::{info, warn};
 
 use crate::model::types::*;
 use crate::model::registry::split_name;
@@ -51,7 +47,7 @@ impl ModelLoader {
         ];
 
         let mut total_size: u64 = 0;
-        for (digest, size, label) in &layers {
+        for (digest, size, _label) in &layers {
             total_size += size;
             let short = &digest[7..26];
 

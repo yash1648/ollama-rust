@@ -3,7 +3,7 @@
 ## Progress
 
 ```
-██░░░░░░░░░░░░░░░░  [ 1/5 milestones ]  Stage 1: MVP Core Complete
+██▓░░░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 4/10 tasks
 ```
 
 ## Milestones
@@ -25,20 +25,20 @@
 | 1.10 | Create README with usage docs | ✅ | |
 
 ### 🏁 Milestone 2: Hardening & Real Infrastructure
-> *Status: Not Started*
+> *Status: In Progress (4/10 tasks)*
 
-| # | Task | Est. Effort | Deps | Notes |
-|---|------|-------------|------|-------|
-| 2.1 | Remove `#![allow(dead_code, ...)]` from main.rs | Small | — | Clean up lint suppressions |
-| 2.2 | Implement real model pulling via HTTPS | Medium | — | reqwest + TLS from registry.ollama.ai |
-| 2.3 | Add configurable host/port (OLLAMA_HOST) | Small | — | Env var parsing |
-| 2.4 | Add graceful shutdown (signal handling) | Small | — | tokio::signal |
-| 2.5 | Add health check endpoint (/api/health) | Small | — | Simple liveness |
-| 2.6 | Add unit tests for registry | Medium | — | Mock store |
-| 2.7 | Add integration tests for API endpoints | Medium | — | axum::test helpers |
-| 2.8 | Set up CI/CD (GitHub Actions) | Medium | 2.6, 2.7 | Build + test + clippy |
-| 2.9 | Add clippy linting + fix warnings | Small | — | Run `cargo clippy` |
-| 2.10 | Create Dockerfile + multi-arch build | Medium | — | Alpine-based |
+| # | Task | Status | Effort | Notes |
+|---|------|--------|--------|-------|
+| 2.1 | Remove `#![allow(dead_code, ...)]` from main.rs | ✅ | Small | Fixed 24 warnings across 8 files |
+| 2.2 | Implement real model pulling via HTTPS | ⬜ | Medium | reqwest + TLS from registry.ollama.ai |
+| 2.3 | Add configurable host/port (OLLAMA_HOST) | ✅ | Small | Env var, default 0.0.0.0:11434 |
+| 2.4 | Add graceful shutdown (signal handling) | ✅ | Small | SIGINT + SIGTERM handler |
+| 2.5 | Add health check endpoint (/api/health) | ✅ | Small | Returns `{"status": "ok"}` |
+| 2.6 | Add unit tests for registry | ⬜ | Medium | Mock store |
+| 2.7 | Add integration tests for API endpoints | ⬜ | Medium | axum::test helpers |
+| 2.8 | Set up CI/CD (GitHub Actions) | ⬜ | Medium | Build + test + clippy |
+| 2.9 | Add clippy linting + fix warnings | ⬜ | Small | Run `cargo clippy` |
+| 2.10 | Create Dockerfile + multi-arch build | ⬜ | Medium | Alpine-based |
 
 ### 🏁 Milestone 3: Real Inference Engine
 > *Status: Not Started*
@@ -81,11 +81,16 @@
 
 ## Current Focus
 
-### First Implementation Slice: Milestone 2 — Hardening
+### Batch 1 Complete: Core Hardening (feat/harden-core)
 
-The MVP core (Milestone 1) is complete. The next logical slice is **Milestone 2** starting with **Task 2.1** (clean up lint suppressions) and **Task 2.3** (OLLAMA_HOST env var), as they're the smallest, highest-impact improvements with no dependencies.
+| Task | Result |
+|------|--------|
+| 2.1 — Remove lint suppressions | ✅ Zero warnings on `cargo build` |
+| 2.3 — OLLAMA_HOST env var | ✅ Configurable bind address |
+| 2.4 — Graceful shutdown | ✅ SIGINT + SIGTERM handling |
+| 2.5 — Health check endpoint | ✅ `GET /api/health` → `{"status": "ok"}` |
 
-**Recommended next task**: `2.1 — Remove lint suppressions from main.rs`
+**Next recommended feature**: Milestone 2 tasks 2.6 & 2.7 — Test suite (unit + integration)
 
 ## Task Status Key
 - ✅ Complete

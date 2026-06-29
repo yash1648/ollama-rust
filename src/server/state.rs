@@ -7,6 +7,7 @@ use crate::storage::ModelStore;
 pub struct AppState {
     pub registry: Arc<ModelRegistry>,
     pub loader: Arc<ModelLoader>,
+    #[allow(dead_code)]
     pub store: ModelStore,
 }
 

@@ -3,8 +3,7 @@
 //! This provides a working stub that returns structured responses
 //! compatible with the Ollama API so clients work immediately.
 
-use std::time::{Duration, Instant};
-use tokio::time::sleep;
+use std::time::Instant;
 use crate::model::types::*;
 
 /// Simulate token generation. In production, replace with llama.cpp FFI call.
@@ -61,7 +60,7 @@ fn tokenize_response(text: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn timing_stats(start: Instant, token_count: u32) -> (u64, u64, u64) {
+pub fn timing_stats(start: Instant, _token_count: u32) -> (u64, u64, u64) {
     let total_ns = start.elapsed().as_nanos() as u64;
     let eval_duration = total_ns * 8 / 10;
     let load_duration = total_ns / 10;

@@ -31,6 +31,7 @@ impl ModelStore {
         self.base.join("manifests")
     }
 
+    #[allow(dead_code)]
     pub fn blobs_dir(&self) -> PathBuf {
         self.base.join("blobs")
     }
@@ -76,6 +77,7 @@ impl ModelStore {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn blob_path(&self, digest: &str) -> PathBuf {
         let filename = digest.replace("sha256:", "");
         self.blobs_dir().join(filename)

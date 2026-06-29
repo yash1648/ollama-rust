@@ -26,6 +26,7 @@ pub struct ModelDetails {
     pub quantization_level: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Modelfile {
     pub from: String,
@@ -213,6 +214,7 @@ pub struct PsResponse {
     pub models: Vec<RunningModel>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VersionResponse {
     pub version: String,
