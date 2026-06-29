@@ -4,10 +4,11 @@
 //! inference using HuggingFace's pure-Rust ML framework.
 //!
 //! ## Supported architectures
-//! - LLaMA (llama, llama2, llama3, codellama, deepseek-llm, yi)
-//!
-//! More architectures (Mistral, Phi, Qwen, Gemma) will be added
-//! in follow-up commits.
+//! - LLaMA (llama, llama2, llama3, codellama, deepseek-llm, yi) — `from_gguf`
+//! - Mistral / Mixtral — `quantized_mistral::Model` via `Config` + `VarBuilder`
+//! - Phi-3 — `from_gguf`
+//! - Qwen2 — `from_gguf`
+//! - Gemma 2/3 — `from_gguf`
 
 use super::InferenceBackend;
 use crate::model::types::*;
@@ -43,7 +44,8 @@ trait ModelForward: Send {
     fn forward(&mut self, input: &Tensor, index_pos: usize) -> Result<Tensor>;
 }
 
-// ── LLaMA family ───────────────────────────────────────────────────────────
+// ── Architecture wrappers ──────────────────────────────────────────────────
+// Each wraps a specific candle-transformers model and delegates `forward`.
 
 struct LlamaModel {
     inner: candle_transformers::models::quantized_llama::ModelWeights,
@@ -53,6 +55,103 @@ impl ModelForward for LlamaModel {
     fn forward(&mut self, input: &Tensor, index_pos: usize) -> Result<Tensor> {
         Ok(self.inner.forward(input, index_pos)?)
     }
+}
+
+struct Phi3Model {
+    inner: candle_transformers::models::quantized_phi3::ModelWeights,
+}
+
+impl ModelForward for Phi3Model {
+    fn forward(&mut self, input: &Tensor, index_pos: usize) -> Result<Tensor> {
+        Ok(self.inner.forward(input, index_pos)?)
+    }
+}
+
+struct Qwen2Model {
+    inner: candle_transformers::models::quantized_qwen2::ModelWeights,
+}
+
+impl ModelForward for Qwen2Model {
+    fn forward(&mut self, input: &Tensor, index_pos: usize) -> Result<Tensor> {
+        Ok(self.inner.forward(input, index_pos)?)
+    }
+}
+
+struct Gemma3Model {
+    inner: candle_transformers::models::quantized_gemma3::ModelWeights,
+}
+
+impl ModelForward for Gemma3Model {
+    fn forward(&mut self, input: &Tensor, index_pos: usize) -> Result<Tensor> {
+        Ok(self.inner.forward(input, index_pos)?)
+    }
+}
+
+/// Mistral uses `Config` + `VarBuilder` instead of `from_gguf`.
+struct MistralModel {
+    inner: candle_transformers::models::quantized_mistral::Model,
+}
+
+impl ModelForward for MistralModel {
+    fn forward(&mut self, input: &Tensor, index_pos: usize) -> Result<Tensor> {
+        Ok(self.inner.forward(input, index_pos)?)
+    }
+}
+
+/// Build a `quantized_mistral::Config` from GGUF metadata keys.
+fn build_mistral_config(ct: &gguf_file::Content) -> candle::Result<candle_transformers::models::mistral::Config> {
+    use candle_nn::Activation;
+
+    let md_get = |s: &str| match ct.metadata.get(s) {
+        None => candle::bail!("cannot find {s} in metadata"),
+        Some(v) => Ok(v),
+    };
+
+    let head_count = md_get("mistral.attention.head_count")?.to_u32()? as usize;
+    let head_count_kv = md_get("mistral.attention.head_count_kv")?.to_u32()? as usize;
+    let block_count = md_get("mistral.block_count")?.to_u32()? as usize;
+    let embedding_length = md_get("mistral.embedding_length")?.to_u32()? as usize;
+    let context_length = md_get("mistral.context_length")?.to_u32()? as usize;
+    let feed_forward_length = md_get("mistral.feed_forward_length")?.to_u32()? as usize;
+    let rms_eps = md_get("mistral.attention.layer_norm_rms_epsilon")?.to_f32()? as f64;
+    let rope_theta = md_get("mistral.rope.freq_base")
+        .and_then(|m| m.to_f32())
+        .unwrap_or(10_000f32) as f64;
+
+    // Check for optional sliding window
+    let sliding_window = ct.metadata
+        .get("mistral.attention.sliding_window")
+        .and_then(|v| v.to_u32().ok())
+        .map(|v| v as usize);
+
+    // Activation function — default to Silu for Mistral
+    let hidden_act = ct.metadata
+        .get("mistral.feed_forward.activation")
+        .and_then(|v| v.to_string().ok())
+        .and_then(|s| {
+            match s.as_str() {
+                "silu" | "SiLU" | "swish" => Some(Activation::Silu),
+                "gelu" => Some(Activation::Gelu),
+                _ => None,
+            }
+        })
+        .unwrap_or(Activation::Silu);
+
+    Ok(candle_transformers::models::mistral::Config {
+        vocab_size: 0,               // populated from tensor shape at load time
+        hidden_size: embedding_length,
+        intermediate_size: feed_forward_length,
+        num_hidden_layers: block_count,
+        num_attention_heads: head_count,
+        head_dim: None,              // inferred from hidden_size / num_attention_heads
+        num_key_value_heads: head_count_kv,
+        hidden_act,
+        max_position_embeddings: context_length,
+        rms_norm_eps: rms_eps,
+        rope_theta,
+        sliding_window,
+        use_flash_attn: false,
+    })
 }
 
 impl CandleBackend {
@@ -152,19 +251,25 @@ impl CandleBackend {
 
         tracing::info!("Loading model, architecture: {arch}");
 
-        let max_seq_len = ct
-            .metadata
-            .get("llama.context_length")
-            .or_else(|| ct.metadata.get("llama.max_position_embeddings"))
-            .or_else(|| ct.metadata.get("mistral.context_length"))
-            .or_else(|| ct.metadata.get("phi3.context_length"))
-            .and_then(|v| v.to_u32().ok())
+        // Determine max_seq_len from the correct architecture prefix
+        let ctx_keys: &[&str] = &[
+            "llama.context_length",
+            "llama.max_position_embeddings",
+            "mistral.context_length",
+            "phi3.context_length",
+            "qwen2.context_length",
+            "gemma3.context_length",
+        ];
+        let max_seq_len = ctx_keys
+            .iter()
+            .find_map(|k| ct.metadata.get(*k).and_then(|v| v.to_u32().ok()))
             .unwrap_or(4096) as usize;
 
         let tokenizer = self.resolve_tokenizer(model_path, &ct, model_name);
 
         // Load the appropriate architecture
         let model: Box<dyn ModelForward> = match arch.as_str() {
+            // ── LLaMA family (from_gguf) ──
             "llama" | "llama2" | "llama3" | "yi" | "deepseek2" | "codellama" => {
                 let m = candle_transformers::models::quantized_llama::ModelWeights::from_gguf(
                     ct, &mut file, &self.device,
@@ -172,11 +277,63 @@ impl CandleBackend {
                 .context("loading quantized LLaMA model")?;
                 Box::new(LlamaModel { inner: m })
             }
-            // Future architectures will be added here
+
+            // ── Phi-3 (from_gguf) ──
+            "phi3" | "phi-3" | "phi-3-mini" => {
+                let m = candle_transformers::models::quantized_phi3::ModelWeights::from_gguf(
+                    false, // use_flash_attn
+                    ct, &mut file, &self.device,
+                )
+                .context("loading quantized Phi-3 model")?;
+                Box::new(Phi3Model { inner: m })
+            }
+
+            // ── Qwen2 (from_gguf) ──
+            "qwen2" => {
+                let m = candle_transformers::models::quantized_qwen2::ModelWeights::from_gguf(
+                    ct, &mut file, &self.device,
+                )
+                .context("loading quantized Qwen2 model")?;
+                Box::new(Qwen2Model { inner: m })
+            }
+
+            // ── Gemma 2/3 (from_gguf) ──
+            "gemma3" | "gemma2" | "gemma" => {
+                let m = candle_transformers::models::quantized_gemma3::ModelWeights::from_gguf(
+                    ct, &mut file, &self.device,
+                )
+                .context("loading quantized Gemma model")?;
+                Box::new(Gemma3Model { inner: m })
+            }
+
+            // ── Mistral / Mixtral (Config + VarBuilder) ──
+            "mistral" | "mixtral" => {
+                // Build config from GGUF metadata
+                let config = build_mistral_config(&ct)
+                    .context("building Mistral config from GGUF metadata")?;
+
+                // Release the file handle before creating VarBuilder (it re-opens)
+                drop(file);
+
+                // VarBuilder loads quantized tensors directly from the GGUF file
+                let vb = candle_transformers::quantized_var_builder::VarBuilder::from_gguf(
+                    model_path, &self.device,
+                )
+                .context("creating quantized VarBuilder from GGUF")?;
+
+                let m = candle_transformers::models::quantized_mistral::Model::new(
+                    &config, vb,
+                )
+                .context("loading quantized Mistral model")?;
+
+                Box::new(MistralModel { inner: m })
+            }
+
             other => {
                 anyhow::bail!(
                     "Unsupported model architecture '{other}'. \
-                     Currently supported: llama, llama2, llama3, yi, deepseek2, codellama"
+                     Currently supported: llama, llama2, llama3, yi, deepseek2, codellama, \
+                     mistral, mixtral, phi3, qwen2, gemma2, gemma3"
                 );
             }
         };
