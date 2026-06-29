@@ -1,7 +1,6 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::fs;
 use std::path::PathBuf;
-use serde_json;
 use tracing::info;
 
 use crate::model::types::ModelInfo;
@@ -78,7 +77,7 @@ impl ModelStore {
     }
 
     pub fn delete_model(&self, full_name: &str) -> Result<()> {
-        let sanitized = full_name.replace(':', "_").replace('/', "_");
+        let sanitized = full_name.replace([':', '/'], "_");
         let filename = format!("{}.json", sanitized);
         let path = self.manifests_dir().join(&filename);
         if path.exists() {

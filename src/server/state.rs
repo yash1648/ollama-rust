@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use crate::model::ModelRegistry;
 use crate::model::loader::ModelLoader;
+use crate::model::ModelRegistry;
 use crate::storage::ModelStore;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {

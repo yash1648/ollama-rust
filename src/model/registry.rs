@@ -1,10 +1,10 @@
+use crate::model::types::*;
+use crate::storage::ModelStore;
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::{Result, anyhow};
 use tracing::info;
-use crate::model::types::*;
-use crate::storage::ModelStore;
 
 pub struct ModelRegistry {
     models: Arc<RwLock<HashMap<String, ModelInfo>>>,
@@ -108,7 +108,7 @@ mod tests {
         ModelInfo {
             name: name.to_string(),
             tag: tag.to_string(),
-            digest: format!("sha256:{}", hex::encode(&[0u8; 32])),
+            digest: format!("sha256:{}", hex::encode([0u8; 32])),
             size: 1024,
             modified_at: chrono::Utc::now(),
             details: ModelDetails {
@@ -197,7 +197,10 @@ mod tests {
     async fn exists_returns_true_for_registered() {
         let store = temp_store();
         let registry = ModelRegistry::new(store);
-        registry.register(sample_model("gemma", "2b")).await.unwrap();
+        registry
+            .register(sample_model("gemma", "2b"))
+            .await
+            .unwrap();
 
         assert!(registry.exists("gemma:2b").await);
     }
@@ -233,7 +236,10 @@ mod tests {
     async fn copy_model() {
         let store = temp_store();
         let registry = ModelRegistry::new(store);
-        registry.register(sample_model("llama3", "8b")).await.unwrap();
+        registry
+            .register(sample_model("llama3", "8b"))
+            .await
+            .unwrap();
 
         registry.copy("llama3:8b", "my-llama:latest").await.unwrap();
         assert!(registry.exists("my-llama:latest").await);
@@ -266,9 +272,18 @@ mod tests {
         let store = temp_store();
         let registry = ModelRegistry::new(store);
 
-        registry.register(sample_model("llama3", "8b")).await.unwrap();
-        registry.register(sample_model("mistral", "7b")).await.unwrap();
-        registry.register(sample_model("gemma", "2b")).await.unwrap();
+        registry
+            .register(sample_model("llama3", "8b"))
+            .await
+            .unwrap();
+        registry
+            .register(sample_model("mistral", "7b"))
+            .await
+            .unwrap();
+        registry
+            .register(sample_model("gemma", "2b"))
+            .await
+            .unwrap();
 
         let models = registry.list().await;
         assert_eq!(models.len(), 3);
@@ -291,7 +306,10 @@ mod tests {
     async fn exists_normalizes_name() {
         let store = temp_store();
         let registry = ModelRegistry::new(store);
-        registry.register(sample_model("demo", "latest")).await.unwrap();
+        registry
+            .register(sample_model("demo", "latest"))
+            .await
+            .unwrap();
 
         // "demo" should normalize to "demo:latest"
         assert!(registry.exists("demo").await);

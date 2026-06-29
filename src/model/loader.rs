@@ -4,15 +4,15 @@
 //! Downloads model manifests and GGUF blobs from registry.ollama.ai,
 //! streaming progress through an mpsc channel for SSE forwarding.
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use futures::StreamExt;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tracing::info;
 
-use crate::model::types::*;
 use crate::model::registry::split_name;
+use crate::model::types::*;
 use crate::storage::ModelStore;
 
 /// HTTP client for pulling models from the Ollama registry.
@@ -35,18 +35,17 @@ impl ModelLoader {
     /// Streams [`PullProgress`] events through `tx` as the download progresses.
     /// On success, returns [`ModelInfo`] and persists both the blob files and
     /// a JSON manifest to `~/.ollama-rs/models/`.
-    pub async fn pull(
-        &self,
-        name: &str,
-        tx: mpsc::Sender<PullProgress>,
-    ) -> Result<ModelInfo> {
+    pub async fn pull(&self, name: &str, tx: mpsc::Sender<PullProgress>) -> Result<ModelInfo> {
         let (model_name, tag) = split_name(name);
 
         // Split into namespace + short name
         // "library/llama3.2" → namespace="library", name="llama3.2"
         // "llama3.2"         → namespace="library", name="llama3.2"
         let (namespace, short_name) = if let Some(slash) = model_name.find('/') {
-            (model_name[..slash].to_string(), model_name[slash + 1..].to_string())
+            (
+                model_name[..slash].to_string(),
+                model_name[slash + 1..].to_string(),
+            )
         } else {
             ("library".to_string(), model_name.clone())
         };
@@ -113,7 +112,14 @@ impl ModelLoader {
                 digest.as_str()
             };
 
-            progress(&tx, format!("pulling {}", short), Some(digest.clone()), Some(*size), None).await;
+            progress(
+                &tx,
+                format!("pulling {}", short),
+                Some(digest.clone()),
+                Some(*size),
+                None,
+            )
+            .await;
 
             let blob_url = format!("{}/blobs/{}", base_url, digest);
             let blob_path = blob_dir.join(digest.replace("sha256:", ""));
@@ -122,7 +128,14 @@ impl ModelLoader {
             if let Ok(meta) = tokio::fs::metadata(&blob_path).await {
                 if meta.len() == *size {
                     info!("Blob {} already exists, skipping", short);
-                    progress(&tx, format!("pulling {}", short), Some(digest.clone()), Some(*size), Some(*size)).await;
+                    progress(
+                        &tx,
+                        format!("pulling {}", short),
+                        Some(digest.clone()),
+                        Some(*size),
+                        Some(*size),
+                    )
+                    .await;
                     continue;
                 }
             }

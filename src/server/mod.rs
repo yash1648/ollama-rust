@@ -1,17 +1,17 @@
-pub mod routes;
-pub mod state;
 pub mod error;
 pub mod inference;
+pub mod routes;
+pub mod state;
 
-pub use state::AppState;
 #[allow(unused_imports)]
 pub use routes::router;
+pub use state::AppState;
 
 use anyhow::Result;
 use axum::Router;
 use std::net::SocketAddr;
 use tokio::signal;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
@@ -20,7 +20,12 @@ pub async fn run(state: AppState, addr: SocketAddr) -> Result<()> {
 
     let app = Router::new()
         .merge(routes::router())
-        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
