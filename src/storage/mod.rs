@@ -23,6 +23,16 @@ impl ModelStore {
         Ok(Self { base })
     }
 
+    /// Create a ModelStore rooted at an arbitrary path.
+    /// Useful for tests or when a non-default root is needed.
+    #[allow(dead_code)]
+    pub fn with_base(base: PathBuf) -> Result<Self> {
+        fs::create_dir_all(&base)?;
+        fs::create_dir_all(base.join("manifests"))?;
+        fs::create_dir_all(base.join("blobs"))?;
+        Ok(Self { base })
+    }
+
     pub fn models_dir(&self) -> PathBuf {
         self.base.clone()
     }

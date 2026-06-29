@@ -4,6 +4,8 @@ pub mod error;
 pub mod inference;
 
 pub use state::AppState;
+#[allow(unused_imports)]
+pub use routes::router;
 
 use anyhow::Result;
 use axum::Router;
