@@ -17,15 +17,27 @@ use anyhow::{anyhow, Context, Result};
 use candle::quantized::gguf_file;
 use candle::{Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::RwLock;
+use tokio::sync::Mutex as AsyncMutex;
 
 /// Candle-based inference backend.
 ///
 /// Loads GGUF models on demand and runs generation using
 /// quantized transformer implementations from `candle-transformers`.
+///
+/// Loaded models are cached in RAM so subsequent requests to the
+/// same model skip the expensive GGUF file loading step.
 pub struct CandleBackend {
     store: ModelStore,
     device: Device,
+    /// Cache of loaded models keyed by `name:tag`.
+    /// Each model is behind an `AsyncMutex` so concurrent requests to
+    /// different models run in parallel, while requests to the same
+    /// model are serialized (one generation at a time).
+    model_cache: RwLock<HashMap<String, Arc<AsyncMutex<LoadedModel>>>>,
 }
 
 /// A loaded model, keeping the GGUF content, reader, and
@@ -158,7 +170,11 @@ impl CandleBackend {
     /// Create a new Candle backend that reads models from the given store.
     pub fn new(store: ModelStore) -> Result<Self> {
         let device = Device::Cpu;
-        Ok(Self { store, device })
+        Ok(Self {
+            store,
+            device,
+            model_cache: RwLock::new(HashMap::new()),
+        })
     }
 
     /// Find the GGUF blob file for a given model name+tag.
@@ -345,6 +361,50 @@ impl CandleBackend {
         })
     }
 
+    /// Get or load a model from the cache.
+    ///
+    /// On cache hit, returns the existing in-memory model (instant).
+    /// On cache miss, loads the GGUF file from disk, inserts it into
+    /// the cache, and returns it.
+    async fn get_or_load_model(
+        &self,
+        name: &str,
+        tag: &str,
+    ) -> Result<Arc<AsyncMutex<LoadedModel>>> {
+        let cache_key = format!("{name}:{tag}");
+
+        // Fast path: check cache under read lock
+        {
+            let cache = self
+                .model_cache
+                .read()
+                .map_err(|e| anyhow!("model cache read lock poisoned: {e}"))?;
+            if let Some(model_arc) = cache.get(&cache_key) {
+                tracing::debug!("Model cache hit: {cache_key}");
+                return Ok(model_arc.clone());
+            }
+        }
+
+        // Cache miss: find blob and load from disk
+        tracing::info!("Model cache miss: {cache_key} — loading from disk");
+        let blob_path = self
+            .find_model_blob(name, tag)?
+            .ok_or_else(|| anyhow!("Model '{name}:{tag}' has no GGUF blob. Pull it first."))?;
+
+        let model_full_name = format!("{name}:{tag}");
+        let loaded = self.load_gguf(&blob_path, &model_full_name)?;
+        let model_arc = Arc::new(AsyncMutex::new(loaded));
+
+        // Store in cache under write lock
+        let mut cache = self
+            .model_cache
+            .write()
+            .map_err(|e| anyhow!("model cache write lock poisoned: {e}"))?;
+        cache.insert(cache_key, model_arc.clone());
+
+        Ok(model_arc)
+    }
+
     /// Generate tokens from a prompt using the loaded model.
     fn generate_tokens_impl(
         &self,
@@ -407,7 +467,7 @@ impl CandleBackend {
             if let Some(tokenizer) = &model.tokenizer {
                 let new_tokens = &all_tokens[prev_index..];
                 if let Ok(text) = tokenizer.decode(new_tokens, true) {
-                    if text.len() > 0 {
+                    if !text.is_empty() {
                         // Send token string (space-delimited for compatibility with SSE stream)
                         output_tokens.push(format!("{} ", text));
                         prev_index = all_tokens.len();
@@ -497,7 +557,7 @@ fn build_tokenizer_from_gguf(ct: &gguf_file::Content) -> Option<tokenizers::Toke
     let merges: Vec<String> = ct
         .metadata
         .get("tokenizer.ggml.merges")
-        .and_then(|v| gguf_vec_string(v))
+        .and_then(gguf_vec_string)
         .unwrap_or_default();
 
     // Only support BPE tokenizers (used by LLaMA/Mistral/etc.)
@@ -542,13 +602,9 @@ impl InferenceBackend for CandleBackend {
         let (name, tag) = crate::model::registry::split_name(&req.model);
         let tag = if tag.is_empty() { "latest" } else { &tag };
 
-        // Find the GGUF model file
-        let blob_path = self
-            .find_model_blob(&name, tag)?
-            .ok_or_else(|| anyhow!("Model '{name}:{tag}' has no GGUF blob. Pull it first."))?;
-
-        // Load model
-        let mut loaded = self.load_gguf(&blob_path, &req.model)?;
+        // Get or load model from cache
+        let model_arc = self.get_or_load_model(&name, tag).await?;
+        let mut model = model_arc.lock().await;
 
         // Determine max tokens from request options
         let max_tokens = req
@@ -562,14 +618,7 @@ impl InferenceBackend for CandleBackend {
         let temperature = req.options.as_ref().and_then(|o| o.temperature).map(|t| t as f64);
 
         // Generate
-        let tokens = self.generate_tokens_impl(
-            &mut loaded,
-            &req.prompt,
-            max_tokens,
-            temperature,
-        )?;
-
-        Ok(tokens)
+        self.generate_tokens_impl(&mut model, &req.prompt, max_tokens, temperature)
     }
 
     async fn chat(&self, req: &ChatRequest) -> Result<Vec<String>> {
@@ -588,11 +637,9 @@ impl InferenceBackend for CandleBackend {
         let (name, tag) = crate::model::registry::split_name(&req.model);
         let tag = if tag.is_empty() { "latest" } else { &tag };
 
-        let blob_path = self
-            .find_model_blob(&name, tag)?
-            .ok_or_else(|| anyhow!("Model '{name}:{tag}' has no GGUF blob. Pull it first."))?;
-
-        let mut loaded = self.load_gguf(&blob_path, &req.model)?;
+        // Get or load model from cache
+        let model_arc = self.get_or_load_model(&name, tag).await?;
+        let mut model = model_arc.lock().await;
 
         let max_tokens = req
             .options
@@ -604,14 +651,7 @@ impl InferenceBackend for CandleBackend {
 
         let temperature = req.options.as_ref().and_then(|o| o.temperature).map(|t| t as f64);
 
-        let tokens = self.generate_tokens_impl(
-            &mut loaded,
-            &prompt,
-            max_tokens,
-            temperature,
-        )?;
-
-        Ok(tokens)
+        self.generate_tokens_impl(&mut model, &prompt, max_tokens, temperature)
     }
 
     fn embed(&self, prompt: &str, dim: usize) -> Vec<f32> {
