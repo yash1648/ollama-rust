@@ -21,18 +21,12 @@ fn test_app() -> axum::Router {
 /// Read the full response body into bytes.
 async fn body_bytes(resp: axum::response::Response) -> Vec<u8> {
     let body = resp.into_body();
-    let collected = body
-        .collect()
-        .await
-        .expect("failed to collect body");
+    let collected = body.collect().await.expect("failed to collect body");
     collected.to_bytes().to_vec()
 }
 
 async fn get(app: &mut axum::Router, uri: &str) -> (StatusCode, Value) {
-    let req = Request::builder()
-        .uri(uri)
-        .body(Body::empty())
-        .unwrap();
+    let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
     let body = body_bytes(resp).await;
@@ -94,10 +88,15 @@ async fn test_create_and_list_model() {
     let mut app = test_app();
 
     // Create a model
-    let (status, _) = post(&mut app, "/api/create", serde_json::json!({
-        "name": "test-model:v1",
-        "modelfile": "FROM llama3:8b\nSYSTEM You are helpful."
-    })).await;
+    let (status, _) = post(
+        &mut app,
+        "/api/create",
+        serde_json::json!({
+            "name": "test-model:v1",
+            "modelfile": "FROM llama3:8b\nSYSTEM You are helpful."
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     // List should now include it
@@ -112,24 +111,39 @@ async fn test_show_existing_model() {
     let mut app = test_app();
 
     // Create first
-    post(&mut app, "/api/create", serde_json::json!({
-        "name": "show-test:latest",
-        "modelfile": "FROM llama3:8b"
-    })).await;
+    post(
+        &mut app,
+        "/api/create",
+        serde_json::json!({
+            "name": "show-test:latest",
+            "modelfile": "FROM llama3:8b"
+        }),
+    )
+    .await;
 
     // Show it
-    let (status, json) = post(&mut app, "/api/show", serde_json::json!({
-        "name": "show-test:latest"
-    })).await;
+    let (status, json) = post(
+        &mut app,
+        "/api/show",
+        serde_json::json!({
+            "name": "show-test:latest"
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert!(json["modelfile"].as_str().unwrap().contains("show-test"));
 }
 
 #[tokio::test]
 async fn test_show_nonexistent_returns_404() {
-    let (status, _) = post(&mut test_app(), "/api/show", serde_json::json!({
-        "name": "ghost:1b"
-    })).await;
+    let (status, _) = post(
+        &mut test_app(),
+        "/api/show",
+        serde_json::json!({
+            "name": "ghost:1b"
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
@@ -138,21 +152,33 @@ async fn test_copy_model() {
     let mut app = test_app();
 
     // Create source
-    post(&mut app, "/api/create", serde_json::json!({
-        "name": "source:latest",
-        "modelfile": "FROM llama3:8b"
-    })).await;
+    post(
+        &mut app,
+        "/api/create",
+        serde_json::json!({
+            "name": "source:latest",
+            "modelfile": "FROM llama3:8b"
+        }),
+    )
+    .await;
 
     // Copy
-    let (status, _) = post(&mut app, "/api/copy", serde_json::json!({
-        "source": "source:latest",
-        "destination": "dest:latest"
-    })).await;
+    let (status, _) = post(
+        &mut app,
+        "/api/copy",
+        serde_json::json!({
+            "source": "source:latest",
+            "destination": "dest:latest"
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     // Verify both exist
     let (_, json) = get(&mut app, "/api/tags").await;
-    let names: Vec<&str> = json["models"].as_array().unwrap()
+    let names: Vec<&str> = json["models"]
+        .as_array()
+        .unwrap()
         .iter()
         .map(|m| m["name"].as_str().unwrap())
         .collect();
@@ -165,10 +191,15 @@ async fn test_delete_model() {
     let mut app = test_app();
 
     // Create
-    post(&mut app, "/api/create", serde_json::json!({
-        "name": "delete-me:latest",
-        "modelfile": "FROM llama3:8b"
-    })).await;
+    post(
+        &mut app,
+        "/api/create",
+        serde_json::json!({
+            "name": "delete-me:latest",
+            "modelfile": "FROM llama3:8b"
+        }),
+    )
+    .await;
 
     // Delete
     let req = Request::builder()
@@ -201,28 +232,43 @@ async fn test_delete_nonexistent_returns_404() {
 
 #[tokio::test]
 async fn test_generate_missing_model_returns_404() {
-    let (status, _) = post(&mut test_app(), "/api/generate", serde_json::json!({
-        "model": "ghost:1b",
-        "prompt": "Hello"
-    })).await;
+    let (status, _) = post(
+        &mut test_app(),
+        "/api/generate",
+        serde_json::json!({
+            "model": "ghost:1b",
+            "prompt": "Hello"
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_chat_missing_model_returns_404() {
-    let (status, _) = post(&mut test_app(), "/api/chat", serde_json::json!({
-        "model": "ghost:1b",
-        "messages": [{"role": "user", "content": "Hi"}]
-    })).await;
+    let (status, _) = post(
+        &mut test_app(),
+        "/api/chat",
+        serde_json::json!({
+            "model": "ghost:1b",
+            "messages": [{"role": "user", "content": "Hi"}]
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_embeddings_missing_model_returns_404() {
-    let (status, _) = post(&mut test_app(), "/api/embeddings", serde_json::json!({
-        "model": "ghost:1b",
-        "prompt": "Hello"
-    })).await;
+    let (status, _) = post(
+        &mut test_app(),
+        "/api/embeddings",
+        serde_json::json!({
+            "model": "ghost:1b",
+            "prompt": "Hello"
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
@@ -233,10 +279,15 @@ async fn test_openai_list_models() {
     let mut app = test_app();
 
     // Create a model
-    post(&mut app, "/api/create", serde_json::json!({
-        "name": "openai-test:v1",
-        "modelfile": "FROM llama3:8b"
-    })).await;
+    post(
+        &mut app,
+        "/api/create",
+        serde_json::json!({
+            "name": "openai-test:v1",
+            "modelfile": "FROM llama3:8b"
+        }),
+    )
+    .await;
 
     let (status, json) = get(&mut app, "/v1/models").await;
     assert_eq!(status, StatusCode::OK);
@@ -246,9 +297,14 @@ async fn test_openai_list_models() {
 
 #[tokio::test]
 async fn test_openai_chat_missing_model_field() {
-    let (status, _) = post(&mut test_app(), "/v1/chat/completions", serde_json::json!({
-        "messages": [{"role": "user", "content": "Hi"}]
-    })).await;
+    let (status, _) = post(
+        &mut test_app(),
+        "/v1/chat/completions",
+        serde_json::json!({
+            "messages": [{"role": "user", "content": "Hi"}]
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
@@ -263,8 +319,13 @@ async fn test_ps_empty() {
 
 #[tokio::test]
 async fn test_push() {
-    let (status, _) = post(&mut test_app(), "/api/push", serde_json::json!({
-        "name": "test:latest"
-    })).await;
+    let (status, _) = post(
+        &mut test_app(),
+        "/api/push",
+        serde_json::json!({
+            "name": "test:latest"
+        }),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 }

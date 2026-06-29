@@ -1,7 +1,10 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{IntoResponse, Response, sse::{Event, KeepAlive, Sse}},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{delete, get, post},
     Json, Router,
 };
@@ -52,13 +55,16 @@ async fn version() -> Json<Value> {
 
 async fn list_models(State(state): State<AppState>) -> Json<ListResponse> {
     let models = state.registry.list().await;
-    let entries: Vec<ModelListEntry> = models.into_iter().map(|m| ModelListEntry {
-        name: m.full_name(),
-        modified_at: m.modified_at,
-        size: m.size,
-        digest: m.digest,
-        details: m.details,
-    }).collect();
+    let entries: Vec<ModelListEntry> = models
+        .into_iter()
+        .map(|m| ModelListEntry {
+            name: m.full_name(),
+            modified_at: m.modified_at,
+            size: m.size,
+            digest: m.digest,
+            details: m.details,
+        })
+        .collect();
     Json(ListResponse { models: entries })
 }
 
@@ -66,14 +72,15 @@ async fn show_model(
     State(state): State<AppState>,
     Json(req): Json<ShowRequest>,
 ) -> Result<Json<ShowResponse>, ApiError> {
-    let info = state.registry.get(&req.name).await
+    let info = state
+        .registry
+        .get(&req.name)
+        .await
         .ok_or_else(|| ApiError::not_found(format!("model '{}' not found", req.name)))?;
 
     Ok(Json(ShowResponse {
         modelfile: format!("FROM {}", info.full_name()),
-        parameters: format!(
-            "temperature 0.8\ntop_p 0.9\nnum_ctx 2048"
-        ),
+        parameters: "temperature 0.8\ntop_p 0.9\nnum_ctx 2048".to_string(),
         template: "{{ .System }}\n\n{{ .Prompt }}".to_string(),
         details: info.details,
     }))
@@ -99,12 +106,14 @@ async fn pull_model(
                 let _ = registry.register(info).await;
             }
             Err(e) => {
-                let _ = tx.send(PullProgress {
-                    status: format!("error: {}", e),
-                    digest: None,
-                    total: None,
-                    completed: None,
-                }).await;
+                let _ = tx
+                    .send(PullProgress {
+                        status: format!("error: {}", e),
+                        digest: None,
+                        total: None,
+                        completed: None,
+                    })
+                    .await;
             }
         }
     });
@@ -117,10 +126,7 @@ async fn pull_model(
     Sse::new(event_stream).keep_alive(KeepAlive::default())
 }
 
-async fn push_model(
-    State(_state): State<AppState>,
-    Json(req): Json<PushRequest>,
-) -> Json<Value> {
+async fn push_model(State(_state): State<AppState>, Json(req): Json<PushRequest>) -> Json<Value> {
     Json(json!({ "status": format!("pushing {}", req.name) }))
 }
 
@@ -131,7 +137,9 @@ async fn create_model(
     info!("Creating model: {}", req.name);
 
     // Parse FROM line from modelfile
-    let from_line = req.modelfile.lines()
+    let from_line = req
+        .modelfile
+        .lines()
         .find(|l| l.to_uppercase().starts_with("FROM "))
         .ok_or_else(|| ApiError::bad_request("Modelfile must contain FROM directive"))?;
 
@@ -141,7 +149,7 @@ async fn create_model(
     let info = ModelInfo {
         name,
         tag,
-        digest: format!("sha256:{}", hex::encode(&[0u8; 32])),
+        digest: format!("sha256:{}", hex::encode([0u8; 32])),
         size: 0,
         modified_at: Utc::now(),
         details: ModelDetails {
@@ -153,7 +161,11 @@ async fn create_model(
         },
     };
 
-    state.registry.register(info).await.map_err(ApiError::from)?;
+    state
+        .registry
+        .register(info)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({ "status": "success" })))
 }
 
@@ -161,7 +173,10 @@ async fn copy_model(
     State(state): State<AppState>,
     Json(req): Json<CopyRequest>,
 ) -> Result<StatusCode, ApiError> {
-    state.registry.copy(&req.source, &req.destination).await
+    state
+        .registry
+        .copy(&req.source, &req.destination)
+        .await
         .map_err(ApiError::from)?;
     Ok(StatusCode::OK)
 }
@@ -180,13 +195,9 @@ async fn delete_model(
     Ok(StatusCode::OK)
 }
 
-async fn generate(
-    State(state): State<AppState>,
-    Json(req): Json<GenerateRequest>,
-) -> Response {
+async fn generate(State(state): State<AppState>, Json(req): Json<GenerateRequest>) -> Response {
     if !state.registry.exists(&req.model).await {
-        return ApiError::not_found(format!("model '{}' not found", req.model))
-            .into_response();
+        return ApiError::not_found(format!("model '{}' not found", req.model)).into_response();
     }
 
     let stream_flag = req.stream.unwrap_or(true);
@@ -197,13 +208,13 @@ async fn generate(
         let tokens = inference::generate_tokens(&req).await;
         let token_count = tokens.len() as u32;
 
-        let event_stream = stream::iter(tokens.into_iter().enumerate()).then(
-            move |(_i, token)| {
+        let event_stream = stream::iter(tokens.into_iter().enumerate())
+            .then(move |(_i, token)| {
                 let model = model_name.clone();
                 async move {
                     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                     let resp = GenerateResponse {
-                        model: model,
+                        model,
                         created_at: Utc::now(),
                         response: token,
                         done: false,
@@ -218,27 +229,29 @@ async fn generate(
                     let data = serde_json::to_string(&resp).unwrap_or_default();
                     Ok::<Event, axum::Error>(Event::default().data(data))
                 }
-            }
-        ).chain(stream::once(async move {
-            let (total, load, eval) = inference::timing_stats(start, token_count);
-            let done_resp = GenerateResponse {
-                model: req.model.clone(),
-                created_at: Utc::now(),
-                response: "".to_string(),
-                done: true,
-                context: Some(vec![1, 2, 3]),
-                total_duration: Some(total),
-                load_duration: Some(load),
-                prompt_eval_count: Some(req.prompt.split_whitespace().count() as u32),
-                prompt_eval_duration: Some(load),
-                eval_count: Some(token_count),
-                eval_duration: Some(eval),
-            };
-            let data = serde_json::to_string(&done_resp).unwrap_or_default();
-            Ok::<Event, axum::Error>(Event::default().data(data))
-        }));
+            })
+            .chain(stream::once(async move {
+                let (total, load, eval) = inference::timing_stats(start, token_count);
+                let done_resp = GenerateResponse {
+                    model: req.model.clone(),
+                    created_at: Utc::now(),
+                    response: "".to_string(),
+                    done: true,
+                    context: Some(vec![1, 2, 3]),
+                    total_duration: Some(total),
+                    load_duration: Some(load),
+                    prompt_eval_count: Some(req.prompt.split_whitespace().count() as u32),
+                    prompt_eval_duration: Some(load),
+                    eval_count: Some(token_count),
+                    eval_duration: Some(eval),
+                };
+                let data = serde_json::to_string(&done_resp).unwrap_or_default();
+                Ok::<Event, axum::Error>(Event::default().data(data))
+            }));
 
-        Sse::new(event_stream).keep_alive(KeepAlive::default()).into_response()
+        Sse::new(event_stream)
+            .keep_alive(KeepAlive::default())
+            .into_response()
     } else {
         let tokens = inference::generate_tokens(&req).await;
         let full_response = tokens.join("");
@@ -262,13 +275,9 @@ async fn generate(
     }
 }
 
-async fn chat(
-    State(state): State<AppState>,
-    Json(req): Json<ChatRequest>,
-) -> Response {
+async fn chat(State(state): State<AppState>, Json(req): Json<ChatRequest>) -> Response {
     if !state.registry.exists(&req.model).await {
-        return ApiError::not_found(format!("model '{}' not found", req.model))
-            .into_response();
+        return ApiError::not_found(format!("model '{}' not found", req.model)).into_response();
     }
 
     let stream_flag = req.stream.unwrap_or(true);
@@ -279,50 +288,54 @@ async fn chat(
         let tokens = inference::chat_tokens(&req).await;
         let token_count = tokens.len() as u32;
 
-        let event_stream = stream::iter(tokens.into_iter()).then(move |token| {
-            let model = model_name.clone();
-            async move {
-                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                let resp = ChatResponse {
-                    model,
+        let event_stream = stream::iter(tokens)
+            .then(move |token| {
+                let model = model_name.clone();
+                async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                    let resp = ChatResponse {
+                        model,
+                        created_at: Utc::now(),
+                        message: Message {
+                            role: "assistant".to_string(),
+                            content: token,
+                            images: None,
+                        },
+                        done: false,
+                        total_duration: None,
+                        load_duration: None,
+                        prompt_eval_count: None,
+                        eval_count: None,
+                        eval_duration: None,
+                    };
+                    let data = serde_json::to_string(&resp).unwrap_or_default();
+                    Ok::<Event, axum::Error>(Event::default().data(data))
+                }
+            })
+            .chain(stream::once(async move {
+                let (total, load, eval) = inference::timing_stats(start, token_count);
+                let done_resp = ChatResponse {
+                    model: req.model.clone(),
                     created_at: Utc::now(),
                     message: Message {
                         role: "assistant".to_string(),
-                        content: token,
+                        content: "".to_string(),
                         images: None,
                     },
-                    done: false,
-                    total_duration: None,
-                    load_duration: None,
-                    prompt_eval_count: None,
-                    eval_count: None,
-                    eval_duration: None,
+                    done: true,
+                    total_duration: Some(total),
+                    load_duration: Some(load),
+                    prompt_eval_count: Some(10),
+                    eval_count: Some(token_count),
+                    eval_duration: Some(eval),
                 };
-                let data = serde_json::to_string(&resp).unwrap_or_default();
+                let data = serde_json::to_string(&done_resp).unwrap_or_default();
                 Ok::<Event, axum::Error>(Event::default().data(data))
-            }
-        }).chain(stream::once(async move {
-            let (total, load, eval) = inference::timing_stats(start, token_count);
-            let done_resp = ChatResponse {
-                model: req.model.clone(),
-                created_at: Utc::now(),
-                message: Message {
-                    role: "assistant".to_string(),
-                    content: "".to_string(),
-                    images: None,
-                },
-                done: true,
-                total_duration: Some(total),
-                load_duration: Some(load),
-                prompt_eval_count: Some(10),
-                eval_count: Some(token_count),
-                eval_duration: Some(eval),
-            };
-            let data = serde_json::to_string(&done_resp).unwrap_or_default();
-            Ok::<Event, axum::Error>(Event::default().data(data))
-        }));
+            }));
 
-        Sse::new(event_stream).keep_alive(KeepAlive::default()).into_response()
+        Sse::new(event_stream)
+            .keep_alive(KeepAlive::default())
+            .into_response()
     } else {
         let tokens = inference::chat_tokens(&req).await;
         let full = tokens.join("");
@@ -353,7 +366,10 @@ async fn embeddings(
     Json(req): Json<EmbeddingRequest>,
 ) -> Result<Json<EmbeddingResponse>, ApiError> {
     if !state.registry.exists(&req.model).await {
-        return Err(ApiError::not_found(format!("model '{}' not found", req.model)));
+        return Err(ApiError::not_found(format!(
+            "model '{}' not found",
+            req.model
+        )));
     }
 
     let embedding = inference::compute_embedding(&req.prompt, 4096);
@@ -369,12 +385,17 @@ async fn ps(State(_state): State<AppState>) -> Json<PsResponse> {
 
 async fn openai_list_models(State(state): State<AppState>) -> Json<Value> {
     let models = state.registry.list().await;
-    let data: Vec<Value> = models.into_iter().map(|m| json!({
-        "id": m.full_name(),
-        "object": "model",
-        "created": m.modified_at.timestamp(),
-        "owned_by": "ollama-rs",
-    })).collect();
+    let data: Vec<Value> = models
+        .into_iter()
+        .map(|m| {
+            json!({
+                "id": m.full_name(),
+                "object": "model",
+                "created": m.modified_at.timestamp(),
+                "owned_by": "ollama-rs",
+            })
+        })
+        .collect();
 
     Json(json!({ "object": "list", "data": data }))
 }
@@ -383,15 +404,16 @@ async fn openai_chat(
     State(_state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let model = body["model"].as_str()
+    let model = body["model"]
+        .as_str()
         .ok_or_else(|| ApiError::bad_request("missing 'model' field"))?
         .to_string();
 
-    let messages = body["messages"].as_array()
-        .cloned()
-        .unwrap_or_default();
+    let messages = body["messages"].as_array().cloned().unwrap_or_default();
 
-    let last_content = messages.iter().rev()
+    let last_content = messages
+        .iter()
+        .rev()
         .find(|m| m["role"] == "user")
         .and_then(|m| m["content"].as_str())
         .unwrap_or("")

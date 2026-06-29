@@ -3,7 +3,7 @@
 ## Progress
 
 ```
-██▓▓▓░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 7/10 tasks
+████▓░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 9/10 tasks
 ```
 
 ## Milestones
@@ -36,8 +36,8 @@
 | 2.5 | Add health check endpoint (/api/health) | ✅ | Small | Returns `{"status": "ok"}` |
 | 2.6 | Add unit tests for registry | ✅ | Medium | 19 unit tests (normalize, split, CRUD) |
 | 2.7 | Add integration tests for API endpoints | ✅ | Medium | 17 integration tests (all endpoints) |
-| 2.8 | Set up CI/CD (GitHub Actions) | ⬜ | Medium | Build + test + clippy |
-| 2.9 | Add clippy linting + fix warnings | ⬜ | Small | Run `cargo clippy` |
+| 2.8 | Set up CI/CD (GitHub Actions) | ✅ | Medium | Build + test + clippy + fmt on push/PR |
+| 2.9 | Add clippy linting + fix warnings | ✅ | Small | Fixed all clippy warnings, zero-clippy verified with `-D clippy::all` |
 | 2.10 | Create Dockerfile + multi-arch build | ⬜ | Medium | Alpine-based |
 
 ### 🏁 Milestone 3: Real Inference Engine
@@ -104,7 +104,15 @@
 |------|--------|
 | 2.2 — Real model pulling via HTTPS | ✅ reqwest + OCI dist spec, streaming blob download with SSE progress, blob caching, manifest persistence |
 
-**Next recommended feature**: Milestone 2 tasks 2.8 & 2.9 — CI/CD pipeline + clippy linting
+### Batch 4 Complete: CI/CD + Clippy + Fmt (feat/ci-cd)
+
+| Task | Result |
+|------|--------|
+| 2.8 — CI/CD (GitHub Actions) | ✅ Build, test, clippy, fmt — runs on push/PR to master |
+| 2.9 — Clippy linting | ✅ Zero warnings across all targets with `-D clippy::all` |
+| cargo fmt | ✅ All source files formatted, `cargo fmt --check` passes |
+
+**Next recommended feature**: Milestone 2 task 2.10 — Dockerfile + multi-arch build
 
 ## Task Status Key
 - ✅ Complete
