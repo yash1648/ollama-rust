@@ -1,0 +1,21 @@
+# Build artifacts
+target/
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Startup Builder memory (not needed in image)
+startup-builder-memory/
+
+# Docker files
+Dockerfile
+.dockerignore
