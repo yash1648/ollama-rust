@@ -3,7 +3,7 @@
 ## Progress
 
 ```
-████▓░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 9/10 tasks
+█████░░░░░░░░░░░░░  [ 2/5 milestones ]  Milestone 2: 10/10 ✅
 ```
 
 ## Milestones
@@ -24,8 +24,8 @@
 | 1.9 | Implement model pulling with progress | ✅ | Simulated pull, mpsc progress stream |
 | 1.10 | Create README with usage docs | ✅ | |
 
-### 🏁 Milestone 2: Hardening & Real Infrastructure
-> *Status: In Progress (7/10 tasks)*
+### 🏁 Milestone 2: Hardening & Real Infrastructure ✅
+> *Status: Complete*
 
 | # | Task | Status | Effort | Notes |
 |---|------|--------|--------|-------|
@@ -38,7 +38,7 @@
 | 2.7 | Add integration tests for API endpoints | ✅ | Medium | 17 integration tests (all endpoints) |
 | 2.8 | Set up CI/CD (GitHub Actions) | ✅ | Medium | Build + test + clippy + fmt on push/PR |
 | 2.9 | Add clippy linting + fix warnings | ✅ | Small | Fixed all clippy warnings, zero-clippy verified with `-D clippy::all` |
-| 2.10 | Create Dockerfile + multi-arch build | ⬜ | Medium | Alpine-based |
+| 2.10 | Create Dockerfile + multi-arch build | ✅ | Medium | Alpine-based, 9.82MB content size, image builds + verifies |
 
 ### 🏁 Milestone 3: Real Inference Engine
 > *Status: Not Started*
@@ -112,7 +112,13 @@
 | 2.9 — Clippy linting | ✅ Zero warnings across all targets with `-D clippy::all` |
 | cargo fmt | ✅ All source files formatted, `cargo fmt --check` passes |
 
-**Next recommended feature**: Milestone 2 task 2.10 — Dockerfile + multi-arch build
+### Batch 5 Complete: Docker (feat/docker)
+
+| Task | Result |
+|------|--------|
+| 2.10 — Dockerfile + multi-arch build | ✅ Alpine-based multi-stage build, 9.82MB content size, binary starts/stopped cleanly in container |
+
+**Next recommended feature**: Milestone 3 — Real Inference Engine
 
 ## Task Status Key
 - ✅ Complete
