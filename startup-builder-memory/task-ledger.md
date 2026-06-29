@@ -3,7 +3,7 @@
 ## Progress
 
 ```
-█████░░░░░░░░░░░░░  [ 2/5 milestones ]  Milestone 2: 10/10 ✅
+████████░░░░░░░░░░  [ 4/5 milestones ]  Milestone 3: 5/7 ✅
 ```
 
 ## Milestones
@@ -119,14 +119,14 @@
 | 2.10 — Dockerfile + multi-arch build | ✅ Alpine-based multi-stage build, 9.82MB content size, binary starts/stopped cleanly in container |
 
 ### 🏁 Milestone 3: Real Inference Engine
-> *Status: In Progress (1/7 tasks)*
+> *Status: In Progress (5/7 tasks)*
 
 | # | Task | Status | Effort | Notes |
 |---|------|--------|--------|-------|
 | 3.1 | Research inference backends | ✅ | Medium | Candle (pure Rust GGUF) vs llama-cpp-rs vs subprocess. Chose **Candle** for single-binary deployment. |
-| 3.2 | Implement Candle inference backend | 🔄 | Large | InferenceBackend trait, CandleBackend with LLaMA GGUF support, HF tokenizer, `OLLAMA_BACKEND=candle` to enable |
-| 3.3 | Additional model architectures | ⬜ | Medium | Mistral/Mixtral, Phi, Qwen, Gemma support |
-| 3.4 | Model loading/unloading to RAM | ⬜ | Medium | Cache loaded models by digest |
+| 3.2 | Implement Candle inference backend | ✅ | Large | InferenceBackend trait, CandleBackend with LLaMA GGUF support, HF tokenizer, `OLLAMA_BACKEND=candle` to enable |
+| 3.3 | Additional model architectures | ✅ | Medium | Mistral/Mixtral, Phi-3, Qwen2, Gemma2/3 — 5 architectures supported |
+| 3.4 | Model loading/unloading to RAM | ✅ | Medium | `RwLock<HashMap>` cache keyed by name:tag, per-model `AsyncMutex` for safe concurrent access, get_or_load_model helper |
 | 3.5 | Proper tokenization | ⬜ | Medium | Chat template support, proper GGUF tokenizer extraction |
 | 3.6 | Context window management | ⬜ | Medium | KV-cache, sliding window |
 | 3.7 | GPU detection + device selection | ⬜ | Small | Metal/CUDA/ROCm |
@@ -137,8 +137,9 @@
 |------|--------|
 | 3.1 — Research | ✅ Compared Candle, llama-cpp-rs, and subprocess approaches. Chose Candle for pure Rust, single-binary, active development |
 | 3.2 — Implementation | ✅ `InferenceBackend` trait, `CandleBackend`, GGUF loading from blob store, tokenizer from HF/GGUF, generation loop, `OLLAMA_BACKEND=candle` env var |
-| Arch support | ✅ LLaMA family (llama, llama2, llama3, codellama, yi, deepseek2) |
-| Tests | ✅ All 36 existing tests pass |
+| 3.3 — Multi-arch | ✅ Mistral/Mixtral, Phi-3, Qwen2, Gemma2/3 — added 4 more architectures beyond LLaMA |
+| 3.4 — Model caching | ✅ `RwLock<HashMap>` cache keyed by name:tag with per-model `AsyncMutex`. `get_or_load_model()` helper. generate()/chat() use cache. Zero new clippy warnings. |
+| Tests | ✅ All 55 tests pass (19 lib + 19 bin + 17 integration) |
 
 ## Task Status Key
 - ✅ Complete

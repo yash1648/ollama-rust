@@ -3,19 +3,19 @@
 ## System Context (C4 — Level 1)
 
 ```
-┌─────────────┐     HTTP/1.1     ┌───────────────────┐     ┌──────────────────┐
-│  Ollama CLI  │ ──────────────> │    ollama-rs       │ ──> │  llama.cpp FFI   │
-│  curl/httpx  │ <────────────── │    (this server)   │ <── │  (future)        │
-│  OpenAI SDK  │     SSE JSON    │    :11434          │     └──────────────────┘
-└─────────────┘                  └────────┬──────────┘
-                                          │
-                                          ▼
-                                  ┌──────────────────┐
-                                  │  ~/.ollama-rs/    │
-                                  │  models/          │
-                                  │  ├─ manifests/    │
-                                  │  └─ blobs/        │
-                                  └──────────────────┘
+┌─────────────┐     HTTP/1.1     ┌───────────────────┐     ┌──────────────────────────┐
+│  Ollama CLI  │ ──────────────> │    ollama-rs       │ ──> │  Candle Inference        │
+│  curl/httpx  │ <────────────── │    (this server)   │ <── │  (pure Rust, GGUF)      │
+│  OpenAI SDK  │     SSE JSON    │    :11434          │     │  5 architectures         │
+└─────────────┘                  └────────┬──────────┘     └──────────────────────────┘
+                                           │
+                                           ▼
+                                   ┌──────────────────┐
+                                   │  ~/.ollama-rs/    │
+                                   │  models/          │
+                                   │  ├─ manifests/    │
+                                   │  └─ blobs/        │
+                                   └──────────────────┘
 ```
 
 ## Container Architecture (C4 — Level 2)
@@ -30,16 +30,20 @@
                           └───────┼──────────────────────────────────────┘
                                   │
           ┌───────────────────────┼──────────────────────────┐
-          ▼                       ▼                          ▼
-┌──────────────────┐   ┌──────────────────┐   ┌──────────────────────┐
-│  Model Registry   │   │  Inference       │   │  Model Loader        │
-│  (in-memory       │   │  Engine (stub)   │   │  (pull/download)    │
-│   RwLock<HashMap>)│   │                  │   │                      │
-│  ┌──────────────┐ │   │  generate()      │   │  pull() → stream    │
-│  │ list/get     │ │   │  chat()          │   │  progress via        │
-│  │ register/    │ │   │  embeddings()    │   │  mpsc channel       │
-│  │ remove/copy  │ │   │                  │   │                      │
-│  └──────────────┘ │   └──────────────────┘   └──────────────────────┘
+          ▼                          ▼                          ▼
+┌──────────────────┐   ┌──────────────────────────┐   ┌──────────────────────┐
+│  Model Registry   │   │  Inference Backend       │   │  Model Loader        │
+│  (in-memory       │   │  (Candle or Stub)        │   │  (pull/download)    │
+│   RwLock<HashMap>)│   │                          │   │                      │
+│  ┌──────────────┐ │   │  CandleBackend:          │   │  OCI distribution    │
+│  │ list/get     │ │   │  ├─ LLaMA/Mistral/Qwen.. │   │  spec pull with      │
+│  │ register/    │ │   │  ├─ Model cache (RAM)    │   │  SSE progress        │
+│  │ remove/copy  │ │   │  └─ HF tokenizer         │   │  stream              │
+│  └──────────────┘ │   │                          │   │                      │
+│                   │   │  StubBackend:            │   │  pull() → stream     │
+│                   │   │  └─ Simulated tokens     │   │  progress via         │
+│                   │   │                          │   │  mpsc channel        │
+│                   │   └──────────────────────────┘   └──────────────────────┘
 └─────────┬─────────┘                                    │
           │                                              │
           ▼                                              ▼
@@ -144,31 +148,34 @@ Client → POST /api/pull
 | **In-memory registry** | Simple, fast, no DB dependency. Models reload on restart from disk. |
 | **Arc<RwLock<HashMap>>** | Standard Rust concurrent shared state pattern |
 | **mpsc channels for progress** | Decouples download progress from SSE stream |
-| **Word-level tokenization** | Stub only — real impl uses llama.cpp tokenizer |
+| **Word-level tokenization** | Stub only — real impl uses Candle tokenizer |
+| **Candle over llama.cpp** | Pure Rust, no FFI, single-binary deployment, active development |
+| **Model cache with per-model Mutex** | `RwLock<HashMap>` for fast reads, `AsyncMutex` per model so requests to different models run in parallel but same-model requests serialize safely |
 | **Stub inference** | Allows API/UX development before inference backend |
 | **Axum 0.6** | Stable, well-documented, tower ecosystem |
 | **No TLS in server** | Delegate to reverse proxy (nginx/caddy) |
 | **Ollama disk layout** | Migration compatibility with existing Ollama models |
 
-## Future Architecture Evolution
+## Evolution History
 
-### Phase 2: Real Inference
+### ✅ Phase 2: Real Inference (Complete)
 ```
-inference.rs:
-  generate_tokens() → llama_cpp_ffi::generate(model, prompt)
-  chat_tokens() → llama_cpp_ffi::chat(model, messages)
-  compute_embedding() → llama_cpp_ffi::embed(prompt)
+backend/:
+  candle.rs → Candle (pure Rust), 5 architectures, model cache
+  stub.rs → Fallback simulated inference
+  InferenceBackend trait → generate(), chat(), embed()
 ```
 
-### Phase 3: HTTPS Registry
+### ✅ Phase 3: HTTPS Registry (Complete)
 ```
 loader.rs:
-  TcpStream → reqwest::Client + TLS
-  registry.ollama.ai → real HTTPS downloads
-  Streaming blob writes with progress
+  reqwest::Client + TLS
+  registry.ollama.ai → real HTTPS downloads with blob caching
+  OCI manifest persistence → find_gguf_blob for CandleBackend
+  SSE progress stream
 ```
 
-### Phase 4: Embeddable Library
+### 🔜 Phase 4: Embeddable Library
 ```
 ollama-rs as a library dependency:
   use ollama_rs::{Ollama, GenerateRequest};

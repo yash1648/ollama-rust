@@ -9,9 +9,12 @@ ollama-rs/                          # Root — Rust binary crate
 ├── Cargo.lock                      # Dependency lockfile
 ├── README.md                       # Quickstart + API docs
 ├── .gitignore                      # Git ignore rules
+├── Dockerfile                      # Multi-stage Alpine build (9.82MB)
+├── .github/workflows/
+│   └── ci.yml                      # CI/CD: build, test, clippy, fmt
 │
 ├── src/
-│   ├── main.rs                     # Entry point — tracing + server startup (25 lines)
+│   ├── main.rs                     # Entry point — tracing, OLLAMA_HOST/BACKEND (56 lines)
 │   │
 │   ├── api/
 │   │   └── mod.rs                  # Public re-exports for library usage (5 lines)
@@ -19,20 +22,26 @@ ollama-rs/                          # Root — Rust binary crate
 │   ├── model/
 │   │   ├── mod.rs                  # Module re-exports (6 lines)
 │   │   ├── types.rs                # 20+ API request/response structs (219 lines)
-│   │   ├── registry.rs             # In-memory model registry + disk CRUD (95 lines)
-│   │   └── loader.rs               # Model pull/download with progress (153 lines)
+│   │   ├── registry.rs             # In-memory model registry + disk CRUD (120 lines)
+│   │   └── loader.rs               # OCI model pull with HTTPS streaming (180 lines)
 │   │
 │   ├── server/
 │   │   ├── mod.rs                  # Axum server setup + middleware (32 lines)
-│   │   ├── state.rs                # AppState (Arc<ModelRegistry> + loader + store) (22 lines)
-│   │   ├── routes.rs               # All 15 route handlers (430 lines)
-│   │   ├── inference.rs            # Stub inference engine (69 lines)
-│   │   └── error.rs                # ApiError → HTTP JSON responses (38 lines)
+│   │   ├── state.rs                # AppState with backend selection (40 lines)
+│   │   ├── routes.rs               # 15 route handlers (430 lines)
+│   │   ├── error.rs                # ApiError → HTTP JSON responses (38 lines)
+│   │   └── backend/
+│   │       ├── mod.rs              # InferenceBackend trait + BackendKind enum
+│   │       ├── candle.rs           # Candle backend — 5 archs + model cache (680 lines)
+│   │       └── stub.rs             # Stub/simulated inference fallback
 │   │
 │   └── storage/
-│       └── mod.rs                  # Filesystem persistence for manifests/blobs (83 lines)
+│       └── mod.rs                  # Filesystem: manifests + blobs + OCI manifest save (150 lines)
 │
-├── startup-builder-memory/         # Startup Builder artifacts (new)
+├── tests/
+│   └── api_test.rs                 # 17 integration tests (server API)
+│
+├── startup-builder-memory/         # Startup Builder artifacts
 │   ├── product-brief.md
 │   ├── architecture-map.md
 │   ├── repo-map.md

@@ -54,14 +54,16 @@ Ollama's Go-based server requires the full Go toolchain and has limited embeddab
 - ✅ Stub inference engine (simulated tokens)
 
 ### MVP Scope — To Complete
-- [ ] **Real inference backend** — llama.cpp FFI, candle, or subprocess
+- [x] **Real inference backend** — Candle (pure Rust), LLaMA + Mistral + Phi-3 + Qwen2 + Gemma
+- [x] **Model caching** — loaded models cached in RAM for instant repeated inference
 - [x] **Real model pulling** — HTTPS download from registry.ollama.ai
-- [ ] **Configurable host/port** — `OLLAMA_HOST` env var support
-- [ ] **Graceful shutdown** — signal handling
-- [ ] **Health check endpoint** — `/api/health`
-- [ ] **Test suite** — unit + integration tests
-- [ ] **CI/CD** — GitHub Actions
-- [ ] **Docker image** — multi-arch
+- [x] **Configurable host/port** — `OLLAMA_HOST` env var support
+- [x] **Graceful shutdown** — signal handling
+- [x] **Health check endpoint** — `/api/health`
+- [x] **Test suite** — 55 tests (19 unit + 19 bin + 17 integration)
+- [x] **Clippy linting** — zero warnings across all targets
+- [x] **CI/CD** — GitHub Actions (build, test, clippy, fmt)
+- [x] **Docker image** — multi-arch, 9.82MB Alpine-based
 
 ### Non-Goals (v0.1.0)
 - Model training / fine-tuning
