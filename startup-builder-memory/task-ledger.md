@@ -3,7 +3,7 @@
 ## Progress
 
 ```
-██▓▓░░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 6/10 tasks
+██▓▓▓░░░░░░░░░░░░░  [ 1/5 milestones ]  Milestone 2: 7/10 tasks
 ```
 
 ## Milestones
@@ -25,12 +25,12 @@
 | 1.10 | Create README with usage docs | ✅ | |
 
 ### 🏁 Milestone 2: Hardening & Real Infrastructure
-> *Status: In Progress (6/10 tasks)*
+> *Status: In Progress (7/10 tasks)*
 
 | # | Task | Status | Effort | Notes |
 |---|------|--------|--------|-------|
 | 2.1 | Remove `#![allow(dead_code, ...)]` from main.rs | ✅ | Small | Fixed 24 warnings across 8 files |
-| 2.2 | Implement real model pulling via HTTPS | ⬜ | Medium | reqwest + TLS from registry.ollama.ai |
+| 2.2 | Implement real model pulling via HTTPS | ✅ | Medium | reqwest + OCI distribution spec; downloads blobs with SSE progress |
 | 2.3 | Add configurable host/port (OLLAMA_HOST) | ✅ | Small | Env var, default 0.0.0.0:11434 |
 | 2.4 | Add graceful shutdown (signal handling) | ✅ | Small | SIGINT + SIGTERM handler |
 | 2.5 | Add health check endpoint (/api/health) | ✅ | Small | Returns `{"status": "ok"}` |
@@ -97,6 +97,12 @@
 | 2.6 — Unit tests for registry | ✅ 19 tests — normalize_name, split_name, register, get, exists, remove, copy, edge cases |
 | 2.7 — Integration tests for API | ✅ 17 tests — health, version, CRUD models, inference errors, OpenAI compat, push/ps |
 | Library target added | ✅ `src/lib.rs` with re-exports for external consumers |
+
+### Batch 3 Complete: Real Model Pulling (feat/real-pull)
+
+| Task | Result |
+|------|--------|
+| 2.2 — Real model pulling via HTTPS | ✅ reqwest + OCI dist spec, streaming blob download with SSE progress, blob caching, manifest persistence |
 
 **Next recommended feature**: Milestone 2 tasks 2.8 & 2.9 — CI/CD pipeline + clippy linting
 

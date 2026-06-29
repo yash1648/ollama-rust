@@ -55,7 +55,7 @@ Ollama's Go-based server requires the full Go toolchain and has limited embeddab
 
 ### MVP Scope — To Complete
 - [ ] **Real inference backend** — llama.cpp FFI, candle, or subprocess
-- [ ] **Real model pulling** — HTTPS download from registry.ollama.ai
+- [x] **Real model pulling** — HTTPS download from registry.ollama.ai
 - [ ] **Configurable host/port** — `OLLAMA_HOST` env var support
 - [ ] **Graceful shutdown** — signal handling
 - [ ] **Health check endpoint** — `/api/health`
