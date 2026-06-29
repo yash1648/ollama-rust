@@ -118,7 +118,27 @@
 |------|--------|
 | 2.10 — Dockerfile + multi-arch build | ✅ Alpine-based multi-stage build, 9.82MB content size, binary starts/stopped cleanly in container |
 
-**Next recommended feature**: Milestone 3 — Real Inference Engine
+### 🏁 Milestone 3: Real Inference Engine
+> *Status: In Progress (1/7 tasks)*
+
+| # | Task | Status | Effort | Notes |
+|---|------|--------|--------|-------|
+| 3.1 | Research inference backends | ✅ | Medium | Candle (pure Rust GGUF) vs llama-cpp-rs vs subprocess. Chose **Candle** for single-binary deployment. |
+| 3.2 | Implement Candle inference backend | 🔄 | Large | InferenceBackend trait, CandleBackend with LLaMA GGUF support, HF tokenizer, `OLLAMA_BACKEND=candle` to enable |
+| 3.3 | Additional model architectures | ⬜ | Medium | Mistral/Mixtral, Phi, Qwen, Gemma support |
+| 3.4 | Model loading/unloading to RAM | ⬜ | Medium | Cache loaded models by digest |
+| 3.5 | Proper tokenization | ⬜ | Medium | Chat template support, proper GGUF tokenizer extraction |
+| 3.6 | Context window management | ⬜ | Medium | KV-cache, sliding window |
+| 3.7 | GPU detection + device selection | ⬜ | Small | Metal/CUDA/ROCm |
+
+### Batch 6: Candle Inference Backend (feat/real-inference)
+
+| Task | Result |
+|------|--------|
+| 3.1 — Research | ✅ Compared Candle, llama-cpp-rs, and subprocess approaches. Chose Candle for pure Rust, single-binary, active development |
+| 3.2 — Implementation | ✅ `InferenceBackend` trait, `CandleBackend`, GGUF loading from blob store, tokenizer from HF/GGUF, generation loop, `OLLAMA_BACKEND=candle` env var |
+| Arch support | ✅ LLaMA family (llama, llama2, llama3, codellama, yi, deepseek2) |
+| Tests | ✅ All 36 existing tests pass |
 
 ## Task Status Key
 - ✅ Complete
