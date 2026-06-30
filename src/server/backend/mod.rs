@@ -7,6 +7,7 @@
 //! - **Candle** — real inference via [candle](https://github.com/huggingface/candle)
 
 pub mod candle;
+pub mod chat_template;
 pub mod stub;
 
 use crate::model::types::*;
